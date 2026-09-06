@@ -79,6 +79,15 @@ namespace Microsoft.PowerShell
         ListView,
     }
 
+    [Flags]
+    public enum SemanticHighlightingMode
+    {
+        None = 0,
+        Commands = 1,
+        Paths = 2,
+        CommandsAndPaths = Commands | Paths,
+    }
+
     public class PSConsoleReadLineOptions
     {
         public const ConsoleColor DefaultCommentColor   = ConsoleColor.DarkGreen;
@@ -383,6 +392,11 @@ namespace Microsoft.PowerShell
         /// Sets the view style for rendering predictive suggestions.
         /// </summary>
         public PredictionViewStyle PredictionViewStyle { get; set; }
+
+        /// <summary>
+        /// Selects the semantic tokens that PSReadLine validates asynchronously while editing.
+        /// </summary>
+        public SemanticHighlightingMode SemanticHighlighting { get; set; }
 
         /// <summary>
         /// How long in milliseconds should we wait before concluding
@@ -834,6 +848,14 @@ namespace Microsoft.PowerShell
             set => _predictionViewStyle = value;
         }
         internal PredictionViewStyle? _predictionViewStyle;
+
+        [Parameter]
+        public SemanticHighlightingMode SemanticHighlighting
+        {
+            get => _semanticHighlighting.GetValueOrDefault();
+            set => _semanticHighlighting = value;
+        }
+        internal SemanticHighlightingMode? _semanticHighlighting;
 
         [Parameter]
         public Hashtable Colors { get; set; }

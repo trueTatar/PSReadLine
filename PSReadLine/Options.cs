@@ -158,6 +158,10 @@ namespace Microsoft.PowerShell
                 Options.PredictionViewStyle = options.PredictionViewStyle;
                 _prediction.SetViewStyle(options.PredictionViewStyle);
             }
+            if (options._semanticHighlighting.HasValue)
+            {
+                Options.SemanticHighlighting = options.SemanticHighlighting;
+            }
             if (options.Colors != null)
             {
                 IDictionaryEnumerator e = options.Colors.GetEnumerator();

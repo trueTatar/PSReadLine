@@ -1121,11 +1121,56 @@ namespace Microsoft.PowerShell
 
         private string GetTokenColor(Token token)
         {
+            string tokenText = SemanticHighlighter.GetLiteralTokenText(token);
+            // Like zsh's path_prefix style, a partial match is valid only at the end of the buffer.
+            bool allowPathPrefix = token.Extent.EndOffset == _buffer.Length;
             if ((token.TokenFlags & TokenFlags.CommandName) != 0)
             {
-                return _options._commandColor;
+                SemanticClassification classification = _semanticHighlighter.ClassifyCommandOrPath(
+                    tokenText,
+                    IsPathLikeCommand(tokenText),
+                    allowPathPrefix);
+
+                return classification switch
+                {
+                    SemanticClassification.Valid => _options._commandColor,
+                    SemanticClassification.Invalid when UnresolvedCommandCouldSucceed(tokenText, _ast)
+                        => _options._defaultTokenColor,
+                    SemanticClassification.Invalid => _options._errorColor,
+                    SemanticClassification.PathPrefix => _options._defaultTokenColor + "\x1b[4m",
+                    SemanticClassification.Pending => _options._defaultTokenColor,
+                    _ => _options._commandColor,
+                };
             }
 
+            string color = GetSyntacticTokenColor(token);
+            if (IsPathCandidate(tokenText))
+            {
+                SemanticClassification pathClassification = _semanticHighlighter.ClassifyPath(tokenText, allowPathPrefix);
+                if (pathClassification == SemanticClassification.Valid
+                    || pathClassification == SemanticClassification.PathPrefix)
+                {
+                    return color + "\x1b[4m";
+                }
+            }
+
+            return color;
+        }
+
+        private static bool IsPathLikeCommand(string command)
+        {
+            return !string.IsNullOrEmpty(command)
+                && (command.IndexOf('/') >= 0 || command.IndexOf('\\') >= 0 || command[0] == '.');
+        }
+
+        private static bool IsPathCandidate(string tokenText)
+        {
+            return !string.IsNullOrWhiteSpace(tokenText)
+                && tokenText[0] != '-';
+        }
+
+        private string GetSyntacticTokenColor(Token token)
+        {
             switch (token.Kind)
             {
             case TokenKind.Comment:

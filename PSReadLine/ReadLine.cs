@@ -31,6 +31,7 @@ namespace Microsoft.PowerShell
     public partial class PSConsoleReadLine : IPSConsoleReadLineMockableMethods
     {
         private const int ConsoleExiting = 1;
+        private const int SemanticHighlightingReady = 2;
 
         // *must* be initialized in the static ctor
         // because the static member _clipboard depends upon it
@@ -59,6 +60,7 @@ namespace Microsoft.PowerShell
         private Thread _readKeyThread;
         private AutoResetEvent _readKeyWaitHandle;
         private AutoResetEvent _keyReadWaitHandle;
+        private AutoResetEvent _semanticHighlightingReady;
         private CancellationToken _cancelReadCancellationToken;
         internal ManualResetEvent _closingWaitHandle;
         private WaitHandle[] _threadProcWaitHandles;
@@ -204,6 +206,13 @@ namespace Microsoft.PowerShell
                     //   - the console is exiting
                     //   - 300ms timeout - to process events if we're idle
                     handleId = WaitHandle.WaitAny(_singleton._requestKeyWaitHandles, 300);
+                    if (handleId == SemanticHighlightingReady)
+                    {
+                        // Semantic checks never render from a worker thread.
+                        _singleton.Render();
+                        continue;
+                    }
+
                     if (handleId != WaitHandle.WaitTimeout)
                     {
                         break;
@@ -747,6 +756,13 @@ namespace Microsoft.PowerShell
             bool usingLegacyConsole = _console is PlatformWindows.LegacyWin32Console;
             _options = new PSConsoleReadLineOptions(hostName ?? DefaultName, usingLegacyConsole);
             _prediction = new Prediction(this);
+            _semanticHighlighter = new SemanticHighlighter(
+                () => _semanticHighlightingReady?.Set(),
+                GetLoadedCommandNames,
+                GetAvailableCommandNamesAsync,
+                GetCurrentFileSystemLocation,
+                path => System.IO.File.Exists(path) || System.IO.Directory.Exists(path),
+                PSReadLine.SemanticHighlighter.PathPrefixExists);
             SetDefaultBindings(_options.EditMode);
         }
 
@@ -770,6 +786,8 @@ namespace Microsoft.PowerShell
                 DelayedOneTimeInitialize();
                 _delayedOneTimeInitCompleted = true;
             }
+
+            _semanticHighlighter.BeginLine(Options.SemanticHighlighting);
 
             _buffer.Clear();
             _edits = new List<EditItem>();
@@ -925,8 +943,9 @@ namespace Microsoft.PowerShell
 
             _readKeyWaitHandle = new AutoResetEvent(false);
             _keyReadWaitHandle = new AutoResetEvent(false);
+            _semanticHighlightingReady = new AutoResetEvent(false);
             _closingWaitHandle = new ManualResetEvent(false);
-            _requestKeyWaitHandles = new WaitHandle[] {_keyReadWaitHandle, _closingWaitHandle};
+            _requestKeyWaitHandles = new WaitHandle[] {_keyReadWaitHandle, _closingWaitHandle, _semanticHighlightingReady};
             _threadProcWaitHandles = new WaitHandle[] {_readKeyWaitHandle, _closingWaitHandle};
 
             // This is for a "being hosted in an alternate appdomain scenario" (the
